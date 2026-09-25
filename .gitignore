@@ -1,0 +1,17 @@
+# Site data and run output. Never commit: it names real tools and recipes.
+scripts/*.txt
+reports/
+backups/
+staging/
+Logs/
+Reports/
+catalog.default.yaml
+
+# Python / build
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+*.spec

@@ -1,0 +1,133 @@
+# PostETUI script catalog.
+#
+# Adding a script = adding a block under `scripts:`. No code changes.
+# Paths are relative to the PostETUI root folder and must stay inside it.
+#
+# A site can override this bundled file by placing its own catalog.yaml in the
+# root folder (next to postetui.exe).
+#
+# Pin every production script:  postetui --print-hashes  then paste the value
+# into `sha256:`. A pinned script whose hash changes is refused until an
+# operator types OVERRIDE. Unpinned scripts run with a warning.
+
+settings:
+  tools_file: scripts/tools.txt        # counted on the Environment box
+  logs_dir: Logs                       # transcripts + postetui_audit.csv
+  docs_url: https://github.com/fittysh/PostETUI/blob/main/OPERATOR_GUIDE.md
+  cancel_grace_seconds: 5
+
+scripts:
+  # ---------------------------------------------------------------------------
+  - id: kla_recipe_proliferate
+    name: "KLA Recipe Audit + Proliferate"
+    path: "scripts/KLA_Recipe_Proliferate.ps1"
+    interpreter: powershell
+    sha256: null                       # pin after copying the script in
+    status: active
+    tags: [kla, icos, ocr, recipe, fleet, transfer]
+    synopsis: "Pull a known-good .rcp from a source tool, audit the targets, then overwrite it across the KLA / ICOS OCR fleet."
+    description: >
+      Tool-to-tool transfer. The master recipe is pulled from the SOURCE tool
+      into local staging and hash-verified, the TARGET tools are audited
+      read-only, then the master overwrites the recipe on every reachable
+      target. Each copy is verified by size + SHA256 and a rollback manifest
+      is written.
+    safety:
+      - "Never deletes any file, local or remote"
+      - "Only recipe names given this session can be written (session whitelist)"
+      - "Backs up the existing remote recipe before overwrite"
+      - "Never overwrites the master onto its own source tool"
+      - "Tool IDs and recipe names are checked for path traversal"
+    supports_dry_run: true
+    dry_run_flag: "-DryRun"
+    # PostETUI already confirmed with the operator: run unattended, no prompts.
+    base_args: ["-NonInteractive", "-Force"]
+    rollback_flag: "-Rollback"
+    manifest_flag: "-ManifestPath"
+    progress_regex: '^\s*\[\s*(?<idx>\d+)\s*/\s*(?<total>\d+)\s*\]\s+(?<tool>[A-Za-z0-9._-]+)(?:\s+(?<status>.*?))?\s*$'
+    report_csv_glob: "scripts/reports/*.csv"
+    log_glob: "scripts/reports/*.log"
+    backup_glob: "scripts/backups/*"
+    manifest_name: "rollback_manifest.csv"
+    timeout_seconds: 3600
+    exit_codes: {0: SUCCESS, 1: WARN, 2: FAILED}
+    one_of_required: [[TargetTools, UseToolsFile]]
+    parameters:
+      - name: Recipe
+        label: "Recipe file name(s)"
+        type: list
+        required: true
+        help: "Bare .rcp names, comma separated. e.g. EXAMPLE_PRODUCT_RECIPE.rcp"
+      - name: SourceTool
+        label: "Source tool ID"
+        type: string
+        required: true
+        help: "Tool that holds the known-good master, e.g. TOOL-A01"
+      - name: TargetTools
+        label: "Target tool IDs"
+        type: list
+        blast_radius: true
+        help: "Comma separated, or paste a column from Excel. Leave empty to use tools.txt."
+      - name: UseToolsFile
+        label: "Use tools.txt as targets"
+        type: bool
+        default: false
+        blast_radius: true
+      - name: SkipIdentical
+        label: "Skip targets that already match"
+        type: bool
+        default: true
+      - name: ToolsFile
+        label: "Tools file override"
+        type: path
+        must_exist: true
+        help: "Optional. Default: scripts/tools.txt"
+
+  # ---------------------------------------------------------------------------
+  - id: kla_auto_collect_report
+    name: "KLA Auto Collect Report"
+    path: "scripts/KLA-Auto-Collect-Report.ps1"
+    interpreter: powershell
+    status: draft                      # parameters not yet confirmed
+    tags: [kla, report, lot]
+    synopsis: "Collect KLA inspection reports for a list of lots."
+    report_csv_glob: "scripts/reports/*.csv"
+    parameters:
+      - name: LotListPath
+        label: "Lot list file"
+        type: path
+        required: true
+        must_exist: true
+
+  # ---------------------------------------------------------------------------
+  - id: component_height_enablement
+    name: "Component Height Enablement"
+    path: "scripts/Component-Height-Enablement.ps1"
+    interpreter: powershell
+    status: draft                      # parameters not yet confirmed
+    tags: [component, height, audit, enable]
+    synopsis: "Audit or enable component height inspection across tools."
+    parameters:
+      - name: Mode
+        type: enum
+        choices: [Audit, Enable]
+        default: Audit
+        required: true
+
+  # ---------------------------------------------------------------------------
+  - id: coplan_lts_analyzer
+    name: "Coplan / LTS Analyzer"
+    path: "scripts/Coplan-LTS-Analyzer.ps1"
+    interpreter: powershell
+    status: draft                      # parameters not yet confirmed
+    tags: [coplanarity, lts, analysis]
+    synopsis: "Analyse coplanarity and LTS results."
+
+  # ---------------------------------------------------------------------------
+  - id: mam_reports_autotrigger
+    name: "MAM Reports Auto-Trigger"
+    path: "scripts/mam_reports_autotrigger.py"
+    interpreter: python
+    status: draft                      # parameters not yet confirmed
+    tags: [mam, report, python]
+    synopsis: "Trigger the MAM report generation."
