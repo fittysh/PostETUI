@@ -204,6 +204,9 @@ it if the file changes.
 notepad "$env:LOCALAPPDATA\PostETUI\catalog.yaml"
 ```
 
+To add scripts that are not in the catalog yet, see
+[Add more scripts](#add-more-scripts-no-code).
+
 The run checklist for technicians is in
 [OPERATOR_GUIDE.md](OPERATOR_GUIDE.md).
 
@@ -290,35 +293,215 @@ Send your Windows login to the corporate proxy:
 
 The mouse works too, but you never need it.
 
-## Add a script (no code)
+## Add more scripts (no code)
 
-Add a block to `catalog.yaml`. Use the copy next to `postetui.exe`, or
-`postetui\assets\catalog.yaml` in a source clone.
+You don't need to change any code to add a script. Each script needs two
+things:
+
+1. The script file in the `scripts` folder.
+2. One entry for it in `catalog.yaml`.
+
+Add as many as you need. They all appear on the Scripts tab.
+
+| Option | Who gets the new scripts |
+|---|---|
+| [1. Your PC only](#option-1-your-pc-only-quick-test) | Only you. Good for testing. |
+| [2. All Micron users](#option-2-all-micron-users-through-a-github-release) | Everyone, through a new GitHub release. |
+
+### Option 1: your PC only (quick test)
+
+**Step 1.** Copy the script files into the scripts folder:
+
+```powershell
+Copy-Item .\My-Script-1.ps1, .\My-Script-2.ps1 "$env:LOCALAPPDATA\PostETUI\scripts\"
+```
+
+**Step 2.** Open the catalog:
+
+```powershell
+notepad "$env:LOCALAPPDATA\PostETUI\catalog.yaml"
+```
+
+**Step 3.** Add one entry per script under `scripts:`. Indent with spaces,
+not tabs. Every entry starts with `  - id:`.
 
 ```yaml
-  - id: my_new_script              # lower_case, unique
-    name: "My New Script"
-    path: "scripts/My-New-Script.ps1"
-    interpreter: powershell        # powershell | pwsh | python
-    sha256: null                   # pin with: postetui --print-hashes
-    tags: [kla, audit]
-    synopsis: "One line shown in the catalog."
-    safety: ["Read-only"]
+  - id: lot_report                     # unique, lower_case
+    name: "Lot Report Collector"
+    path: "scripts/My-Script-1.ps1"    # inside the PostETUI folder; subfolders are fine
+    interpreter: powershell            # powershell | pwsh | python
+    tags: [kla, report]
+    synopsis: "Collect reports for a lot list."
     supports_dry_run: true
     dry_run_flag: "-DryRun"
-    base_args: ["-NonInteractive"] # always passed
+    base_args: ["-NonInteractive"]     # always passed
     report_csv_glob: "scripts/reports/*.csv"
+    exit_codes: {0: SUCCESS, 1: WARN, 2: FAILED}
     parameters:
       - {name: LotListPath, type: path, required: true, must_exist: true}
       - {name: TimeoutSeconds, type: int, default: 60, min: 10, max: 600}
+
+  - id: height_audit
+    name: "Component Height Audit"
+    path: "scripts/My-Script-2.ps1"
+    parameters:
       - {name: Mode, type: enum, choices: [Audit, Enable], default: Audit}
-      - {name: SkipPing, type: bool, default: false}
       - {name: TargetTools, type: list, blast_radius: true}
+      - {name: SkipPing, type: bool, default: false}
 ```
 
-Restart PostETUI and the script appears. PostETUI builds the form from
-`parameters`. It fills in your last-used values and checks every field
-before it will run.
+**Step 4.** Check the catalog and show each script's SHA-256 fingerprint.
+If the YAML has a mistake, this prints the line number.
+
+```powershell
+postetui --print-hashes
+```
+
+**Step 5.** Pin each script. Paste its fingerprint into `sha256:` on that
+script's entry, then save the file. Once a script is pinned, PostETUI
+refuses to run it if the file changes.
+
+**Step 6.** Restart PostETUI. The new scripts appear on the Scripts tab.
+
+```powershell
+postetui
+```
+
+### Option 2: all Micron users, through a GitHub release
+
+Run these in your source clone (see
+[Option C](#option-c-from-source-developers)).
+
+**Step 1.** Go to the clone and get the latest changes:
+
+```powershell
+cd "$HOME\PostETUI"; git pull
+```
+
+**Step 2.** Copy the script files into `scripts\`:
+
+```powershell
+Copy-Item .\My-Script-1.ps1, .\My-Script-2.ps1 .\scripts\
+```
+
+**Step 3.** Add one entry per script to the bundled catalog. Use the same
+format as Option 1, Step 3.
+
+```powershell
+notepad .\postetui\assets\catalog.yaml
+```
+
+**Step 4.** Check the catalog and get the fingerprints. Paste each
+fingerprint into `sha256:`, then save.
+
+```powershell
+.\.venv\Scripts\python -m postetui --print-hashes
+```
+
+**Step 5.** Try the scripts in PostETUI. Dry-run each one.
+
+```powershell
+.\PostETUI.bat
+```
+
+**Step 6.** Commit and push:
+
+```powershell
+git add scripts postetui\assets\catalog.yaml; git commit -m "feat: add lot report and height audit scripts"; git push
+```
+
+**Step 7.** Publish a release. Use a version one higher than the last one on
+the [Releases page](https://github.com/fittysh/PostETUI/releases). The
+release workflow tests and builds a new zip that includes the scripts.
+
+```powershell
+git tag v1.1.0; git push origin v1.1.0
+```
+
+**Step 8.** Tell users to update by running the install command again:
+
+```powershell
+irm https://raw.githubusercontent.com/fittysh/PostETUI/main/install.ps1 | iex
+```
+
+**Existing installs keep their own `catalog.yaml`.** The installer does not
+overwrite it, so a site's pins are never lost. The new entries go into
+`catalog.default.yaml` instead. On each PC that already had PostETUI, copy
+the new entries from `catalog.default.yaml` into `catalog.yaml`:
+
+```powershell
+notepad "$env:LOCALAPPDATA\PostETUI\catalog.default.yaml"; notepad "$env:LOCALAPPDATA\PostETUI\catalog.yaml"
+```
+
+### Turn on a draft entry
+
+These four scripts are already in the catalog as `status: draft`:
+
+- KLA Auto Collect Report
+- Component Height Enablement
+- Coplan / LTS Analyzer
+- MAM Reports Auto-Trigger
+
+To turn one on:
+
+1. Put the script file in `scripts\`. Its name must match the entry's
+   `path:` exactly.
+2. Make `parameters:` match the real script's parameters.
+3. Change `status: draft` to `status: active`.
+4. Pin it with `postetui --print-hashes`.
+
+### What makes a script work well in PostETUI
+
+- **No prompts.** PostETUI starts scripts with no keyboard input, so
+  Read-Host always gets an empty answer. Give every choice a parameter, or
+  add a `-NonInteractive` or `-Force` switch to `base_args`.
+- **Progress bar.** Print one line per tool, like
+  `[ 3 / 10 ] TOOL-A02  SUCCESS`. The bar and counters update live.
+- **Reports tab.** Write a CSV with `TargetTool` and `Status` columns into
+  the folder that `report_csv_glob` points to.
+- **Rollback tab.** Add `rollback_flag`, `manifest_flag` and `backup_glob`.
+  See the `kla_recipe_proliferate` entry for an example.
+- **Exit codes.** Map them with `exit_codes`. Any code not listed counts as
+  FAILED.
+- **Python scripts.** Set `interpreter: python`. Parameters are passed as
+  `--Name value`.
+
+### Catalog field reference
+
+Script entry:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `id` | yes | Unique name: lower-case letters, digits and `_` |
+| `name` | yes | Name shown in the catalog |
+| `path` | yes | Script file, relative to the PostETUI folder. It must stay inside that folder. |
+| `interpreter` | | `powershell` (default), `pwsh` or `python` |
+| `sha256` | | Pinned fingerprint from `postetui --print-hashes`. Leave it `null` to run with a warning. |
+| `status` | | `active` (default) or `draft` |
+| `tags`, `synopsis`, `description`, `safety` | | Text shown in the Details panel. The `/` filter searches `tags`. |
+| `supports_dry_run`, `dry_run_flag` | | Turn on dry-run and name its switch, e.g. `-DryRun` |
+| `base_args` | | Switches added to every run, e.g. `["-NonInteractive", "-Force"]` |
+| `timeout_seconds` | | Kill the run after this many seconds (default 3600) |
+| `exit_codes` | | e.g. `{0: SUCCESS, 1: WARN, 2: FAILED}` |
+| `progress_regex` | | Custom progress line format with named groups `idx`, `total`, `tool` and `status` |
+| `report_csv_glob`, `log_glob` | | Where the script writes its CSV reports and logs |
+| `rollback_flag`, `manifest_flag`, `backup_glob`, `manifest_name` | | Turn on the Rollback tab for this script |
+| `one_of_required` | | At least one of these parameters must be set, e.g. `[[TargetTools, UseToolsFile]]` |
+
+Parameter:
+
+| Field | Meaning |
+|---|---|
+| `name` | Parameter name. PostETUI passes it as `-Name` (`--Name` for Python). |
+| `type` | `string`, `path`, `int`, `bool`, `enum` or `list` |
+| `label`, `help` | Text shown in the form |
+| `default` | Value the form starts with. After that, PostETUI remembers the last value used. |
+| `required` | The field must be filled in |
+| `must_exist` | For `path`: the file must exist. UNC paths are not checked. |
+| `min`, `max` | For `int`: allowed range |
+| `choices` | For `enum`: the allowed values |
+| `flag` | Use a different switch name than `-Name` |
+| `blast_radius` | Count this field's tools in the "N tool(s) will be written" line |
 
 Rules the catalog enforces:
 
